@@ -128,25 +128,11 @@ for index, row in results.iterrows():
         st.write(f"**🚌 起步交通：** {row['起步交通']}")
         st.write(f"**💡 路線貼士：** {row['路線亮點與長輩貼士']}")
 
-        import os
-
         col1, col2 = st.columns(2)
         with col1:
             st.link_button("▶️ 觀看隊長影片介紹", str(row["YouTuber介紹連結"]))
         with col2:
-            # 自動檢查 GitHub 的 gpx 資料夾裡有沒有對應路線名稱的 .gpx 檔案！
-            gpx_filepath = f"gpx/{row['路線名稱']}.gpx"
-            if os.path.exists(gpx_filepath):
-                with open(gpx_filepath, "rb") as f:
-                    st.download_button(
-                        label="📥 一鍵下載 GPX 路線檔",
-                        data=f,
-                        file_name=f"{row['路線名稱']}.gpx",
-                        mime="application/gpx+xml",
-                        key=f"dl_{index}"
-                    )
-            else:
-                st.link_button("🗺️ 前往 TrailWatch 搜尋路線", str(row["GPX下載連結"]))
+            st.link_button("📥 下載 GPX 路線圖", str(row["GPX下載連結"]))
 
 st.divider()
 st.caption("🧭 安全提醒：下載 GPX 路線檔後，請匯入「行山樂 / TrailWatch / AllTrails」等專業行山 App 使用離線地圖與 GPS 定位，山區訊號不穩時更安全可靠。")
