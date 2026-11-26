@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import requests
@@ -132,7 +133,21 @@ for index, row in results.iterrows():
         with col1:
             st.link_button("▶️ 觀看隊長影片介紹", str(row["YouTuber介紹連結"]))
         with col2:
-            st.link_button("📥 下載 GPX 路線圖", str(row["GPX下載連結"]))
+            gpx_path = f"gpx/{row['路線名稱']}.gpx"
+            if os.path.exists(gpx_path):
+                with open(gpx_path, "rb") as f:
+                    st.download_button(
+                        label="📥 下載 GPX（iPhone 專用）",
+                        data=f,
+                        file_name=f"{row['路線名稱']}.gpx",
+                        mime="application/octet-stream",
+                        key=f"gpx_{index}"
+                    )
+            else:
+                st.link_button("🗺️ 搜尋路線圖", str(row["GPX下載連結"]))
 
 st.divider()
-st.caption("🧭 安全提醒：下載 GPX 路線檔後，請匯入「行山樂 / TrailWatch / AllTrails」等專業行山 App 使用離線地圖與 GPS 定位，山區訊號不穩時更安全可靠。")
+with st.expander("📱 教學：點樣將下載嘅 GPX 放入「香港遠足路線」App？"):
+    st.write("1. 點擊「📥 下載 GPX」後，按 Safari 右上角或左下角 **藍色向下箭嘴** ➔ 點選該 `.gpx` 檔案。")
+    st.write("2. 打開檔案後，點擊右上角 **分享圖示（方格向上箭嘴）**。")
+    st.write("3. 向左滑動 App 圖示，點選 **「香港遠足路線」** 即可自動匯入離線地圖！")
