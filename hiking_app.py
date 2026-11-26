@@ -101,6 +101,11 @@ st.divider()
 # ==========================================
 try:
     df = pd.read_csv("hiking_trails.csv")
+    # 自動過濾：只保留在 gpx/ 資料夾裡有對應原版 .gpx 檔案的路線！
+    def has_gpx(name):
+        safe_name = str(name).strip().replace("/", "_").replace("\\", "_")
+        return os.path.exists(f"gpx/{safe_name}.gpx")
+    df = df[df["路線名稱"].apply(has_gpx)]
 except FileNotFoundError:
     st.error("⚠️ 找不到路線資料庫 hiking_trails.csv")
     st.stop()
