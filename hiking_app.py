@@ -116,6 +116,22 @@ if keyword.strip():
     results = df[mask]
 else:
     results = df
+    # 確保即使舊資料沒有「發布日期」欄位也不會報錯
+if "發布日期" not in results.columns:
+    results["發布日期"] = "近期收錄"
+results["發布日期"] = results["發布日期"].fillna("近期收錄")
+
+sort_order = st.radio(
+    "📅 路線排序方式：",
+    ("🆕 最新發布排最前", "🕰️ 較早發布排最前"),
+    horizontal=True
+)
+
+if sort_order == "🆕 最新發布排最前":
+    # 若有日期則按日期由新到舊排，同時保留最新抓取順序
+    results = results.sort_values(by="發布日期", ascending=False)
+else:
+    results = results.sort_values(by="發布日期", ascending=True)
 
 st.write(f"📋 共找到 **{len(results)}** 條隊長推薦路線：")
 
@@ -125,6 +141,7 @@ st.write(f"📋 共找到 **{len(results)}** 條隊長推薦路線：")
 for index, row in results.iterrows():
     with st.container(border=True):
         st.markdown(f"### 🥾 {row['路線名稱']}")
+        st.caption(f"📅 影片發布日期：{row['發布日期']}")
         st.write(f"**難度：** {row['難度']} ｜ **預計時間：** {row['預計時間']}")
         st.write(f"**🚌 起步交通：** {row['起步交通']}")
         st.write(f"**💡 路線貼士：** {row['路線亮點與長輩貼士']}")
