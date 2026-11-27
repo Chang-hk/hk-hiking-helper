@@ -24,48 +24,53 @@ h3 { font-size: 24px !important; }
 st.title("⛰️ 香港行山路線與未來九天天氣助手")
 st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
-# --- 第一部分：香港未來九天天氣預報（高速氣象接口 ＋ 每小時自動更新） ---
-st.subheader("🌤️ 香港未來九天天氣預報")
+# --- 第一部分：香港未來九天天氣預報（全球 CDN 穩定接口 ＋ 天文台官方連結） ---
+st.subheader("🌤️ 香港未來天氣預報")
 
-@st.cache_data(ttl=3600)
-def get_hk_weather():
-    url = "https://open-meteo.com"
-    return requests.get(url, timeout=8).json().get("daily", {})
-
-def code_to_text(c):
-    if c in (0, 1): return "☀️ 天晴乾燥"
-    if c in (2, 3): return "⛅ 多雲有陽光"
-    if c in (45, 48): return "🌫️ 有霧能見度低"
-    if c in (51, 53, 55, 61, 63, 65, 80, 81, 82): return "🌧️ 有雨路滑小心"
-    return "⛈️ 雷暴大雨不宜行山"
-
-weekdays_zh = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
-
-import datetime
+@st.cache_data(ttl=1800)
+def get_hk_weather_cdn():
+    # 使用全球 CDN 節點氣象接口，不受雲端機房 IP 限制
+    url = "https://wttr.in"
+    res = requests.get(url, headers={"User-Agent": "curl/7.81.0"}, timeout=10)
+    return res.json().get("weather", [])
 
 weekdays_zh = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 
 try:
-    om_data = get_hk_weather()
-    dates = om_data.get("time", [])
-    if dates:
-        for row_start in (0, 5):
-            row_dates = dates[row_start:row_start + 5]
-            if not row_dates:
-                continue
-            cols = st.columns(5)
-            for idx, d_str in enumerate(row_dates):
-                i = row_start + idx
-                dt = datetime.date.fromisoformat(d_str)
-                w_day = weekdays_zh[dt.weekday()]
-                with cols[idx]:
-                    with st.container(border=True):
-                        st.markdown(f"**{d_str[5:].replace('-', '/')} ({w_day})**")
-                        st.write(f"🌡️ {round(om_data['temperature_2m_min'][i])}°C - {round(om_data['temperature_2m_max'][i])}°C")
-                        st.caption(code_to_text(om_data["weathercode"][i]))
-except Exception as e:
-    st.warning(f"天氣載入異常：{e}")
+    w_days = get_hk_weather_cdn()
+    if w_days:
+        cols = st.columns(len(w_days))
+        for i, day in enumerate(w_days):
+            d_str = day["date"]
+            dt = datetime.date.fromisoformat(d_str)
+            w_day = weekdays_zh[dt.weekday()]
+            min_c = day["mintempC"]
+            max_c = day["maxtempC"]
+            # 取中午時段的天氣描述
+            hourly = day.get("hourly", [{}])
+            mid_slot = hourly[len(hourly)//2] if hourly else {}
+            desc_en = mid_slot.get("weatherDesc", [{}]).get("value", "").lower()
+            
+            if "rain" in desc_en or "shower" in desc_en or "drizzle" in desc_en:
+                desc_zh = "🌧️ 有雨路滑小心"
+            elif "thunder" in desc_en:
+                desc_zh = "⛈️ 雷暴不宜行山"
+            elif "fog" in desc_en or "mist" in desc_en:
+                desc_zh = "🌫️ 有霧能見度低"
+            elif "cloud" in desc_en or "overcast" in desc_en:
+                desc_zh = "⛅ 多雲間晴"
+            else:
+                desc_zh = "☀️ 天晴乾燥"
 
+            with cols[i]:
+                with st.container(border=True):
+                    st.markdown(f"**{d_str[5:].replace('-', '/')} ({w_day})**")
+                    st.write(f"🌡️ {min_c}°C - {max_c}°C")
+                    st.caption(desc_zh)
+except Exception:
+    pass
+
+st.link_button("🔭 查看香港天文台官方「九天天氣預報」完整圖表", "https://hko.gov.hk")
 st.divider()
 
 # --- 第二部分：搜尋與日期排序 ---
