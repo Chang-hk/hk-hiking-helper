@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="香港長輩行山助手", page_icon="⛰️", layout="wide")
+st.set_page_config(page_title="香港行山助手", page_icon="⛰️", layout="wide")
 
 # 長輩友善超大字體與清晰按鈕樣式
 st.markdown("""
@@ -21,7 +21,7 @@ h3 { font-size: 24px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⛰️ 香港長輩行山路線與九天天氣助手")
+st.title("⛰️ 香港行山路線與未來九天天氣助手")
 st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
 # --- 第一部分：香港天文台 9 天天氣預報 ---
