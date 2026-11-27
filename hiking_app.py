@@ -1,124 +1,61 @@
 import os
-import streamlit as st
-import pandas as pd
 import requests
-from datetime import datetime, timedelta
+import pandas as pd
+import streamlit as st
 
-st.set_page_config(page_title="香港長輩行山助手", page_icon="⛰️", layout="centered")
+st.set_page_config(page_title="香港長輩行山助手", page_icon="⛰️", layout="wide")
 
-# 專為長輩手機閱讀設計：全局放大字體與按鈕高度
+# 長輩友善超大字體與清晰按鈕樣式
 st.markdown("""
-    <style>
-    html, body, [class*="css"] { font-size: 20px !important; }
-    h1 { font-size: 32px !important; }
-    h2, h3 { font-size: 25px !important; }
-    .stButton>button, .stLinkButton>a {
-        font-size: 20px !important;
-        padding: 12px 20px !important;
-        width: 100%;
-    }
-    </style>
+<style>
+html, body, [class*="css"] { font-size: 20px !important; }
+h1 { font-size: 34px !important; color: #1B5E20 !important; }
+h2 { font-size: 26px !important; color: #2E7D32 !important; }
+h3 { font-size: 24px !important; }
+.stButton>button, .stDownloadButton>button {
+    font-size: 20px !important;
+    padding: 12px 20px !important;
+    border-radius: 10px !important;
+    width: 100% !important;
+}
+</style>
 """, unsafe_allow_html=True)
 
-st.title("⛰️ Captain VL 隊長行山路線與天氣助手")
+st.title("⛰️ 香港長輩行山路線與九天天氣助手")
+st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
-# ==========================================
-# 1. 串接香港天文台：即時警告 ＋ 九天天氣預報
-# ==========================================
-@st.cache_data(ttl=900)
-def get_hko_data():
-    domain = "https://" + "data." + "weather.gov.hk"
-    try:
-        w_url = f"{domain}/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc"
-        warnings = requests.get(w_url, timeout=8).json()
-        
-        fnd_url = f"{domain}/weatherAPI/opendata/weather.php?dataType=fnd&lang=tc"
-        nine_day = requests.get(fnd_url, timeout=8).json()
-        return warnings, nine_day
-    except Exception:
-        return None, None
-
-warnings, nine_day = get_hko_data()
-
-if warnings:
-    for code, info in warnings.items():
-        st.error(f"⚠️ **現正生效警告：{info.get('name')}**（若今日出發請特別留意安全！）")
-
-# --- 預計出發日期選擇器 ---
-st.subheader("📅 查詢預計出發日天氣預報")
-today = datetime.now().date()
-max_date = today + timedelta(days=9)
-
-selected_date = st.date_input(
-    "請點選預計行山日期（提供未來 9 天天文台預報）：",
-    value=today,
-    min_value=today,
-    max_value=max_date
-)
-
-target_date_str = selected_date.strftime("%Y%m%d")
-
-matched_forecast = None
-if nine_day and "weatherForecast" in nine_day:
-    for day_info in nine_day["weatherForecast"]:
-        if day_info.get("forecastDate") == target_date_str:
-            matched_forecast = day_info
-            break
-
-if matched_forecast:
-    week_day = matched_forecast.get("week", "")
-    weather_desc = matched_forecast.get("forecastWeather", "")
-    wind_desc = matched_forecast.get("forecastWind", "")
-    min_temp = matched_forecast.get("forecastMintemp", {}).get("value", "")
-    max_temp = matched_forecast.get("forecastMaxtemp", {}).get("value", "")
-    min_rh = matched_forecast.get("forecastMinrh", {}).get("value", "")
-    max_rh = matched_forecast.get("forecastMaxrh", {}).get("value", "")
-    psr = matched_forecast.get("PSR", "")
-
-    with st.container(border=True):
-        st.markdown(f"### 🌤️ {selected_date.strftime('%Y年%m月%d日')}（{week_day}）天氣預報")
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("🌡️ 氣溫範圍", f"{min_temp}°C ~ {max_temp}°C")
-        c2.metric("💧 相對濕度", f"{min_rh}% ~ {max_rh}%")
-        c3.metric("☔ 降雨機率", psr)
-        
-        st.info(f"**天氣狀況：** {weather_desc}\n\n**風力情況：** {wind_desc}")
-        
-        if psr in ("中高", "高") or "雨" in weather_desc or "雷" in weather_desc:
-            st.warning("🥾 **山友安全貼士：** 該日有較高機會下雨，山路可能濕滑，建議帶備雨具、穿防滑鞋或考慮改期。")
-        elif isinstance(max_temp, (int, float)) and max_temp >= 30:
-            st.warning("☀️ **山友安全貼士：** 該日天氣炎熱，請帶備充足飲用水與電解質飲品防中暑。")
-        else:
-            st.success("✨ **山友安全貼士：** 天氣不錯，非常適合相約山友一起出發！")
-else:
-    st.info("💡 天文台暫時只提供未來 9 天的詳細預報，請選擇 9 天內的日期查看。")
+# --- 第一部分：香港天文台 9 天天氣預報 ---
+st.subheader("🌤️ 香港天文台未來九天天氣預報")
+try:
+    w_url = "https://weather.gov.hk"
+    w_data = requests.get(w_url, timeout=8).json()
+    forecasts = w_data.get("weatherForecast", [])[:5]
+    cols = st.columns(len(forecasts))
+    for i, day in enumerate(forecasts):
+        with cols[i]:
+            date_str = f"{day['forecastDate'][4:6]}/{day['forecastDate'][6:8]}"
+            st.markdown(f"**{date_str} ({day['week']})**")
+            st.write(f"🌡️ {day['forecastMintemp']['value']}°C - {day['forecastMaxtemp']['value']}°C")
+            st.caption(day['forecastWeather'])
+except Exception:
+    st.info("暫時無法連線香港天文台天氣接口，請稍後再試。")
 
 st.divider()
 
-# ==========================================
-# 2. 讀取隊長路線資料庫並提供關鍵字搜尋
-# ==========================================
+# --- 第二部分：搜尋與日期排序 ---
 try:
     df = pd.read_csv("hiking_trails.csv")
-    # 自動過濾：只保留在 gpx/ 資料夾裡有對應原版 .gpx 檔案的路線！
-    def has_gpx(name):
-        safe_name = str(name).strip().replace("/", "_").replace("\\", "_")
-        return os.path.exists(f"gpx/{safe_name}.gpx")
-    df = df[df["路線名稱"].apply(has_gpx)]
 except FileNotFoundError:
-    st.error("⚠️ 找不到路線資料庫 hiking_trails.csv")
+    st.error("⚠️ 找不到路線資料庫 hiking_trails.csv，請確認已上傳至 GitHub。")
     st.stop()
 
 st.subheader("🔍 搜尋與排序香港行山路線")
 
-# 1. 將發布日期轉為標準日期格式，無法辨識的舊資料自動排在最後
 if "發布日期" not in df.columns:
     df["發布日期"] = "近期收錄"
 df["發布日期"] = df["發布日期"].fillna("近期收錄")
 df["排序用日期"] = pd.to_datetime(df["發布日期"], errors="coerce")
 
-# 2. 並排顯示「關鍵字搜尋」與「排序方式」
 col_search, col_sort = st.columns(2)
 with col_search:
     keyword = st.text_input("輸入地點或山名：", placeholder="例如：大東山、西貢、水塘（留空顯示全部）")
@@ -129,7 +66,6 @@ with col_sort:
         index=0
     )
 
-# 3. 關鍵字過濾
 if keyword.strip():
     mask = (
         df["路線名稱"].str.contains(keyword.strip(), case=False, na=False) |
@@ -139,22 +75,23 @@ if keyword.strip():
 else:
     results = df.copy()
 
-# 4. 執行精準排序（日期相同的話，依照原本抓取順序排列，並把無日期的排在最後）
 is_asc = (sort_order == "🕰️ 較早發布排最前")
 results = results.sort_values(by="排序用日期", ascending=is_asc, na_position="last")
 
 st.write(f"📋 共顯示 **{len(results)}** 條香港行山路線：")
 
-# ==========================================
-# 3. 逐條顯示大字體路線卡片與影片／GPX 按鈕
-# ==========================================
+# --- 第三部分：路線卡片列表 ---
 for index, row in results.iterrows():
     with st.container(border=True):
-        st.markdown(f"### 🥾 {row['路線名稱']}")
-        st.caption(f"📅 影片發布日期：{row['發布日期']}")
-        st.write(f"**難度：** {row['難度']} ｜ **預計時間：** {row['預計時間']}")
-        st.write(f"**🚌 起步交通：** {row['起步交通']}")
-        st.write(f"**💡 路線貼士：** {row['路線亮點與長輩貼士']}")
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            st.markdown(f"### 🥾 {row['路線名稱']}")
+            st.caption(f"📅 影片發布日期：{row['發布日期']} ｜ 📍 地區：{row['地區關鍵字']}")
+            st.write(f"**難度：** {row['難度']} ｜ **預計時間：** {row['預計時間']}")
+            st.write(f"🚌 **起步交通：** {row['起步交通']}")
+            st.write(f"💡 **路線貼士：** {row['路線亮點與長輩貼士']}")
+            st.link_button("▶️ 觀看 Captain VL 隊長實地行山影片", str(row["YouTuber介紹連結"]))
 
         with col2:
             safe_name = str(row['路線名稱']).strip().replace("/", "_").replace("\\", "_")
@@ -177,13 +114,12 @@ for index, row in results.iterrows():
                     )
             else:
                 st.info("ℹ️ **影片未提供 QR Code，已參考影片介紹自動生成 GPX 參考點**")
-                # 自動查詢該路線在香港的真實地標經緯度
                 lat, lon = "22.3193", "114.1694"
                 try:
                     geo_url = f"https://openstreetmap.org{safe_name}+Hong+Kong&format=json&limit=1"
-                    geo_res = requests.get(geo_url, headers={"User-Agent": "HKHikingHelper/1.0"}, timeout=3).json()
+                    geo_res = requests.get(geo_url, headers={"User-Agent": "HKHikingHelper/1.0"}, timeout=2).json()
                     if geo_res:
-                        lat, lon = geo_res["lat"], geo_res["lon"]
+                        lat, lon = geo_res[0]["lat"], geo_res[0]["lon"]
                 except Exception:
                     pass
 
@@ -205,9 +141,3 @@ for index, row in results.iterrows():
                     mime="application/octet-stream",
                     key=f"fb_gpx_{index}"
                 )
-
-st.divider()
-with st.expander("📱 教學：點樣將下載嘅 GPX 放入「香港遠足路線」App？"):
-    st.write("1. 點擊「📥 下載 GPX」後，按 Safari 右上角或左下角 **藍色向下箭嘴** ➔ 點選該 `.gpx` 檔案。")
-    st.write("2. 打開檔案後，點擊右上角 **分享圖示（方格向上箭嘴）**。")
-    st.write("3. 向左滑動 App 圖示，點選 **「香港遠足路線」** 即可自動匯入離線地圖！")
