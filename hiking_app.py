@@ -70,7 +70,7 @@ try:
 except Exception:
     pass
 
-st.link_button("🔭 查看香港天文台官方「九天天氣預報」完整圖表", "https://hko.gov.hk")
+st.link_button("🔭 查看香港天文台官方「九天天氣預報」完整圖表", "https://www.hko.gov.hk")
 st.divider()
 
 # --- 第二部分：搜尋與日期排序 ---
