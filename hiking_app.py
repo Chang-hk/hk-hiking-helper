@@ -27,7 +27,7 @@ st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官�
 # --- 第一部分：香港天文台 9 天天氣預報 ---
 st.subheader("🌤️ 香港天文台未來九天天氣預報")
 try:
-    w_url = "https://weather.gov.hk"
+    w_url = "https://www.weather.gov.hk"
     w_data = requests.get(w_url, timeout=8).json()
     forecasts = w_data.get("weatherForecast", [])[:5]
     cols = st.columns(len(forecasts))
