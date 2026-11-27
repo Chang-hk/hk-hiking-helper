@@ -24,21 +24,55 @@ h3 { font-size: 24px !important; }
 st.title("⛰️ 香港行山路線與未來九天天氣助手")
 st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
-# --- 第一部分：香港天文台 9 天天氣預報 ---
-st.subheader("🌤️ 香港天文台未來九天天氣預報")
+# --- 第一部分：香港未來天氣預報（HKO 優先 ＋ 海外雲端備援） ---
+st.subheader("🌤️ 香港未來五天天氣預報")
+weather_loaded = False
+
+# 1. 優先嘗試連線香港天文台官方接口
 try:
     w_url = "https://weather.gov.hk"
-    w_data = requests.get(w_url, timeout=8).json()
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    w_data = requests.get(w_url, headers=headers, timeout=10).json()
     forecasts = w_data.get("weatherForecast", [])[:5]
-    cols = st.columns(len(forecasts))
-    for i, day in enumerate(forecasts):
-        with cols[i]:
-            date_str = f"{day['forecastDate'][4:6]}/{day['forecastDate'][6:8]}"
-            st.markdown(f"**{date_str} ({day['week']})**")
-            st.write(f"🌡️ {day['forecastMintemp']['value']}°C - {day['forecastMaxtemp']['value']}°C")
-            st.caption(day['forecastWeather'])
+    if forecasts:
+        cols = st.columns(len(forecasts))
+        for i, day in enumerate(forecasts):
+            with cols[i]:
+                date_str = f"{day['forecastDate'][4:6]}/{day['forecastDate'][6:8]}"
+                st.markdown(f"**{date_str} ({day['week']})**")
+                st.write(f"🌡️ {day['forecastMintemp']['value']}°C - {day['forecastMaxtemp']['value']}°C")
+                st.caption(day['forecastWeather'])
+        weather_loaded = True
 except Exception:
-    st.info("暫時無法連線香港天文台天氣接口，請稍後再試。")
+    pass
+
+# 2. 若雲端伺服器位於海外被阻擋，自動無縫切換全球氣象接口（鎖定香港尖沙咀座標）
+if not weather_loaded:
+    try:
+        om_url = "https://open-meteo.com"
+        om_data = requests.get(om_url, timeout=8).json().get("daily", {})
+        dates = om_data.get("time", [])
+        t_max = om_data.get("temperature_2m_max", [])
+        t_min = om_data.get("temperature_2m_min", [])
+        codes = om_data.get("weathercode", [])
+        
+        def code_to_text(c):
+            if c in (0, 1): return "☀️ 天晴乾燥"
+            if c in (2, 3): return "⛅ 多雲有陽光"
+            if c in (45, 48): return "🌫️ 有霧能見度低"
+            if c in (51, 53, 55, 61, 63, 65, 80, 81, 82): return "🌧️ 有雨路滑小心"
+            return "⛈️ 雷暴大雨不宜行山"
+
+        if dates:
+            cols = st.columns(len(dates))
+            for i in range(len(dates)):
+                with cols[i]:
+                    st.markdown(f"**{dates[i][5:].replace('-', '/')}**")
+                    st.write(f"🌡️ {round(t_min[i])}°C - {round(t_max[i])}°C")
+                    st.caption(code_to_text(codes[i]))
+            weather_loaded = True
+    except Exception:
+        st.info("暫時無法取得天氣預報，出發前請留意香港天文台最新消息。")
 
 st.divider()
 
