@@ -41,11 +41,14 @@ def code_to_text(c):
 
 weekdays_zh = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 
+import datetime
+
+weekdays_zh = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
+
 try:
     om_data = get_hk_weather()
     dates = om_data.get("time", [])
     if dates:
-        # 分成兩排顯示（前 5 天一排、後 4 天一排），手機與電腦閱讀字體都寬敞清晰
         for row_start in (0, 5):
             row_dates = dates[row_start:row_start + 5]
             if not row_dates:
@@ -53,15 +56,15 @@ try:
             cols = st.columns(5)
             for idx, d_str in enumerate(row_dates):
                 i = row_start + idx
-                dt = pd.to_datetime(d_str)
+                dt = datetime.date.fromisoformat(d_str)
                 w_day = weekdays_zh[dt.weekday()]
                 with cols[idx]:
                     with st.container(border=True):
                         st.markdown(f"**{d_str[5:].replace('-', '/')} ({w_day})**")
                         st.write(f"🌡️ {round(om_data['temperature_2m_min'][i])}°C - {round(om_data['temperature_2m_max'][i])}°C")
                         st.caption(code_to_text(om_data["weathercode"][i]))
-except Exception:
-    st.info("天氣資料更新中，請稍後重新整理。")
+except Exception as e:
+    st.warning(f"天氣載入異常：{e}")
 
 st.divider()
 
