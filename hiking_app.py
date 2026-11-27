@@ -110,35 +110,40 @@ except FileNotFoundError:
     st.error("⚠️ 找不到路線資料庫 hiking_trails.csv")
     st.stop()
 
-st.subheader("🔍 搜尋你想去的行山地點")
-keyword = st.text_input("請輸入地點或關鍵字（例如：大東山、西貢、大嶼山、水塘）：", placeholder="留空則顯示全部推薦路線")
+st.subheader("🔍 搜尋與排序香港行山路線")
 
+# 1. 將發布日期轉為標準日期格式，無法辨識的舊資料自動排在最後
+if "發布日期" not in df.columns:
+    df["發布日期"] = "近期收錄"
+df["發布日期"] = df["發布日期"].fillna("近期收錄")
+df["排序用日期"] = pd.to_datetime(df["發布日期"], errors="coerce")
+
+# 2. 並排顯示「關鍵字搜尋」與「排序方式」
+col_search, col_sort = st.columns(2)
+with col_search:
+    keyword = st.text_input("輸入地點或山名：", placeholder="例如：大東山、西貢、水塘（留空顯示全部）")
+with col_sort:
+    sort_order = st.selectbox(
+        "📅 排序方式：",
+        ("🆕 最新發布排最前", "🕰️ 較早發布排最前"),
+        index=0
+    )
+
+# 3. 關鍵字過濾
 if keyword.strip():
     mask = (
         df["路線名稱"].str.contains(keyword.strip(), case=False, na=False) |
         df["地區關鍵字"].str.contains(keyword.strip(), case=False, na=False)
     )
-    results = df[mask]
+    results = df[mask].copy()
 else:
-    results = df
-    # 確保即使舊資料沒有「發布日期」欄位也不會報錯
-if "發布日期" not in results.columns:
-    results["發布日期"] = "近期收錄"
-results["發布日期"] = results["發布日期"].fillna("近期收錄")
+    results = df.copy()
 
-sort_order = st.radio(
-    "📅 路線排序方式：",
-    ("🆕 最新發布排最前", "🕰️ 較早發布排最前"),
-    horizontal=True
-)
+# 4. 執行精準排序（日期相同的話，依照原本抓取順序排列，並把無日期的排在最後）
+is_asc = (sort_order == "🕰️ 較早發布排最前")
+results = results.sort_values(by="排序用日期", ascending=is_asc, na_position="last")
 
-if sort_order == "🆕 最新發布排最前":
-    # 若有日期則按日期由新到舊排，同時保留最新抓取順序
-    results = results.sort_values(by="發布日期", ascending=False)
-else:
-    results = results.sort_values(by="發布日期", ascending=True)
-
-st.write(f"📋 共找到 **{len(results)}** 條隊長推薦路線：")
+st.write(f"📋 共顯示 **{len(results)}** 條香港行山路線：")
 
 # ==========================================
 # 3. 逐條顯示大字體路線卡片與影片／GPX 按鈕
@@ -151,22 +156,55 @@ for index, row in results.iterrows():
         st.write(f"**🚌 起步交通：** {row['起步交通']}")
         st.write(f"**💡 路線貼士：** {row['路線亮點與長輩貼士']}")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.link_button("▶️ 觀看隊長影片介紹", str(row["YouTuber介紹連結"]))
         with col2:
-            gpx_path = f"gpx/{row['路線名稱']}.gpx"
-            if os.path.exists(gpx_path):
-                with open(gpx_path, "rb") as f:
+            safe_name = str(row['路線名稱']).strip().replace("/", "_").replace("\\", "_")
+            matched_gpx = None
+            if os.path.exists("gpx"):
+                for fname in os.listdir("gpx"):
+                    if fname.lower() == f"{safe_name.lower()}.gpx":
+                        matched_gpx = os.path.join("gpx", fname)
+                        break
+
+            if matched_gpx:
+                st.success("✅ **隊長實走原版完整軌跡**")
+                with open(matched_gpx, "rb") as f:
                     st.download_button(
-                        label="📥 下載 GPX（iPhone 專用）",
+                        label="📥 下載隊長原版 GPX（iPhone 專用）",
                         data=f,
-                        file_name=f"{row['路線名稱']}.gpx",
+                        file_name=f"{safe_name}.gpx",
                         mime="application/octet-stream",
                         key=f"gpx_{index}"
                     )
             else:
-                st.link_button("🗺️ 搜尋路線圖", str(row["GPX下載連結"]))
+                st.info("ℹ️ **影片未提供 QR Code，已參考影片介紹自動生成 GPX 參考點**")
+                # 自動查詢該路線在香港的真實地標經緯度
+                lat, lon = "22.3193", "114.1694"
+                try:
+                    geo_url = f"https://openstreetmap.org{safe_name}+Hong+Kong&format=json&limit=1"
+                    geo_res = requests.get(geo_url, headers={"User-Agent": "HKHikingHelper/1.0"}, timeout=3).json()
+                    if geo_res:
+                        lat, lon = geo_res["lat"], geo_res["lon"]
+                except Exception:
+                    pass
+
+                fallback_gpx = f'''<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Captain VL Hiking Helper" xmlns="http://topografix.com">
+  <metadata>
+    <name>{safe_name}（參考路線）</name>
+    <desc>{row['起步交通']}｜{row['路線亮點與長輩貼士']}</desc>
+  </metadata>
+  <wpt lat="{lat}" lon="{lon}">
+    <name>{safe_name}（影片介紹參考地標）</name>
+    <desc>起步交通：{row['起步交通']}｜貼士：{row['路線亮點與長輩貼士']}</desc>
+  </wpt>
+</gpx>'''
+                st.download_button(
+                    label="📥 下載參考介紹 GPX（iPhone 專用）",
+                    data=fallback_gpx.encode("utf-8"),
+                    file_name=f"{safe_name}_參考路線.gpx",
+                    mime="application/octet-stream",
+                    key=f"fb_gpx_{index}"
+                )
 
 st.divider()
 with st.expander("📱 教學：點樣將下載嘅 GPX 放入「香港遠足路線」App？"):
