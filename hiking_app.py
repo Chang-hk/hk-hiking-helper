@@ -28,11 +28,11 @@ st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官�
 st.subheader("🌤️ 香港未來九天天氣與出遊建議")
 
 @st.cache_data(ttl=1800)
-def get_9day_hk_weather():
-    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-    # 1. 優先嘗試香港天文台官方 9 天預報接口
+def fetch_hk_9day_forecast():
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    # 1. 優先連線香港天文台官方 9 天預報接口
     try:
-        hko_url = "https://weather.gov.hk"
+        hko_url = "https://www.weather.gov.hk"
         r = requests.get(hko_url, headers=headers, timeout=6)
         if r.status_code == 200 and r.text.strip():
             f_list = r.json().get("weatherForecast", [])
@@ -52,15 +52,17 @@ def get_9day_hk_weather():
     except Exception:
         pass
 
-    # 2. 雲端備援：Open-Meteo 附帶瀏覽器標頭抓取香港未來 9 天預報
+    # 2. 雲端備援：Open-Meteo 抓取香港尖沙咀總部未來 9 天預報
     om_url = "https://open-meteo.com"
     om = requests.get(om_url, headers=headers, timeout=8).json().get("daily", {})
     weekdays_zh = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+    times = om.get("time", [])
+    probs = om.get("precipitation_probability_max", [])
     result = []
-    for i, d_str in enumerate(om.get("time", [])):
+    for i, d_str in enumerate(times):
         dt = datetime.date.fromisoformat(d_str)
         code = om["weathercode"][i]
-        prob = om.get("precipitation_probability_max", [0]*9)[i] or 0
+        prob = probs[i] if (i < len(probs) and probs[i] is not None) else 0
         if code in (0, 1): desc = "天晴乾燥，陽光充沛"
         elif code in (2, 3): desc = "大致多雲，間中有陽光"
         elif code in (45, 48): desc = "早晚有霧，能見度較低"
@@ -77,15 +79,13 @@ def get_9day_hk_weather():
     return result
 
 try:
-    days_9 = get_9day_hk_weather()
+    days_9 = fetch_hk_9day_forecast()
     if days_9:
-        # 製作未來 9 天日期下拉選單（例如：2026-11-28 (星期六)）
         day_options = [f"{d['date']} ({d['week']})" for d in days_9]
         selected_label = st.selectbox("📅 請選擇打算行山的日期（未來九天）：", day_options, index=0)
         sel_idx = day_options.index(selected_label)
         sel_day = days_9[sel_idx]
 
-        # 顯示當天詳細氣象卡片與出遊建議
         with st.container(border=True):
             c_weather, c_advice = st.columns([1.2, 1.3])
             with c_weather:
@@ -107,10 +107,8 @@ try:
                     st.warning("🌫️ **出遊建議：山區有霧，宜選熟悉大路**\n\n能見度較低，請避免前往無明顯路標的荒山野嶺。")
                 else:
                     st.success("✅ **出遊建議：非常適合行山出遊！**\n\n天色穩定舒適，長輩可安心按體力挑選心水路線，記得帶備適量食水與防曬。")
-    else:
-        st.info("暫時無法取得九天預報，可點此查看：[香港天文台官方九天天氣預報](https://hko.gov.hk)")
-except Exception:
-    st.info("天氣資料更新中，請稍後重新整理，或點此查看：[香港天文台官方九天天氣預報](https://hko.gov.hk)")
+except Exception as e:
+    st.warning(f"天氣資料更新中，請稍後重新整理")
 
 st.divider()
 
