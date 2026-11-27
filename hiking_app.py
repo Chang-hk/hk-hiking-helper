@@ -22,67 +22,64 @@ h3 { font-size: 24px !important; }
 """, unsafe_allow_html=True)
 
 st.title("⛰️ 香港行山路線與未來九天天氣助手")
-st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 美國國家氣象局全球預報系統")
+st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
-# --- 第一部分：香港未來九天天氣預報與出遊建議（NOAA 全球預報接口 ＋ 零阻擋） ---
+# --- 第一部分：香港未來九天天氣預報與出遊建議 ---
 st.subheader("🌤️ 香港未來九天天氣與出遊建議")
 
 @st.cache_data(ttl=1800)
-def get_hk_9day_noaa():
-    # 使用 NOAA GFS 全球氣象網格接口（香港尖沙咀座標 114.1742, 22.3019），完全開放無 IP 限制
-    url = "https://7timer.info"
-    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-    dataseries = res.json().get("dataseries", [])
+def fetch_hk_9day_forecast():
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    # 1. 優先連線香港天文台官方 9 天預報接口
+    try:
+        hko_url = "https://www.weather.gov.hk"
+        r = requests.get(hko_url, headers=headers, timeout=6)
+        if r.status_code == 200 and r.text.strip():
+            f_list = r.json().get("weatherForecast", [])
+            if len(f_list) >= 9:
+                result = []
+                for d in f_list[:9]:
+                    d_fmt = f"{d['forecastDate'][:4]}-{d['forecastDate'][4:6]}-{d['forecastDate'][6:8]}"
+                    result.append({
+                        "date": d_fmt,
+                        "week": d["week"],
+                        "min_c": d["forecastMintemp"]["value"],
+                        "max_c": d["forecastMaxtemp"]["value"],
+                        "desc": d["forecastWeather"],
+                        "rain_prob": d.get("PSR", "低")
+                    })
+                return result
+    except Exception:
+        pass
 
-    # 氣象代碼中文翻譯表
-    weather_map = {
-        "clear": ("☀️ 天晴乾燥，陽光充沛", "低 (10%)"),
-        "pcloudy": ("⛅ 晴間多雲，天氣舒適", "低 (15%)"),
-        "mcloudy": ("🌥️ 大致多雲，間中有陽光", "低 (20%)"),
-        "cloudy": ("☁️ 密雲天陰，涼爽宜行", "中 (30%)"),
-        "humid": ("🌫️ 潮濕有霧，能見度較低", "中 (30%)"),
-        "lightrain": ("🌦️ 有微雨或陣雨，山路微滑", "高 (60%)"),
-        "oshower": ("🌧️ 間中有驟雨，山路濕滑", "高 (70%)"),
-        "ishower": ("🌧️ 局部地區有驟雨", "中高 (50%)"),
-        "rain": ("🌧️ 有雨，山路濕滑小心", "極高 (85%)"),
-        "ts": ("⛈️ 有狂風雷暴", "極高 (90%)"),
-        "tsrain": ("⛈️ 雷暴及大雨，危險勿行", "極高 (95%)")
-    }
+    # 2. 雲端備援：Open-Meteo 抓取香港尖沙咀總部未來 9 天預報
+    om_url = "https://open-meteo.com"
+    om = requests.get(om_url, headers=headers, timeout=8).json().get("daily", {})
     weekdays_zh = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
-
+    times = om.get("time", [])
+    probs = om.get("precipitation_probability_max", [])
     result = []
-    for item in dataseries:
-        d_raw = str(item["date"])
-        d_fmt = f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}"
-        dt = datetime.date.fromisoformat(d_fmt)
-        w_code = item.get("weather", "clear")
-        desc, prob = weather_map.get(w_code, ("⛅ 天色穩定", "低 (20%)"))
-        t_obj = item.get("temp2m", {})
+    for i, d_str in enumerate(times):
+        dt = datetime.date.fromisoformat(d_str)
+        code = om["weathercode"][i]
+        prob = probs[i] if (i < len(probs) and probs[i] is not None) else 0
+        if code in (0, 1): desc = "天晴乾燥，陽光充沛"
+        elif code in (2, 3): desc = "大致多雲，間中有陽光"
+        elif code in (45, 48): desc = "早晚有霧，能見度較低"
+        elif code in (51, 53, 55, 61, 63, 65, 80, 81, 82): desc = "有驟雨，山路可能濕滑"
+        else: desc = "有狂風雷暴及大雨"
         result.append({
-            "date": d_fmt,
+            "date": d_str,
             "week": weekdays_zh[dt.weekday()],
-            "min_c": t_obj.get("min", 18),
-            "max_c": t_obj.get("max", 24),
+            "min_c": round(om["temperature_2m_min"][i]),
+            "max_c": round(om["temperature_2m_max"][i]),
             "desc": desc,
-            "rain_prob": prob
+            "rain_prob": f"{prob}%"
         })
-
-    # 若接口回傳 7 天，自動推算補足第 8、9 天趨勢，確保完整提供未來 9 天日期選擇
-    while 0 < len(result) < 9:
-        last = result[-1]
-        next_dt = datetime.date.fromisoformat(last["date"]) + datetime.timedelta(days=1)
-        result.append({
-            "date": next_dt.isoformat(),
-            "week": weekdays_zh[next_dt.weekday()],
-            "min_c": last["min_c"],
-            "max_c": last["max_c"],
-            "desc": "⛅ 遠期預測天色大致穩定（出發前請再確認）",
-            "rain_prob": "低 (20%)"
-        })
-    return result[:9]
+    return result
 
 try:
-    days_9 = get_hk_9day_noaa()
+    days_9 = fetch_hk_9day_forecast()
     if days_9:
         day_options = [f"{d['date']} ({d['week']})" for d in days_9]
         selected_label = st.selectbox("📅 請選擇打算行山的日期（未來九天）：", day_options, index=0)
@@ -100,7 +97,7 @@ try:
             with c_advice:
                 desc_txt = sel_day["desc"]
                 max_temp = int(sel_day["max_c"])
-                if any(w in desc_txt for w in ("雷暴", "大雨", "危險")):
+                if any(w in desc_txt for w in ("雷暴", "大雨", "狂風")):
                     st.error("🚫 **出遊建議：強烈不建議行山！**\n\n預測有雷暴或大雨，山區易有山洪及雷擊風險，請改期再出發。")
                 elif any(w in desc_txt for w in ("雨", "濕滑")):
                     st.warning("⚠️ **出遊建議：不建議走崎嶇山路**\n\n預計有雨路滑，長輩若要外出建議改走市區平緩海濱或水塘石屎路，並帶備雨具及防滑鞋。")
@@ -111,7 +108,7 @@ try:
                 else:
                     st.success("✅ **出遊建議：非常適合行山出遊！**\n\n天色穩定舒適，長輩可安心按體力挑選心水路線，記得帶備適量食水與防曬。")
 except Exception as e:
-    st.warning(f"天氣載入異常：{e}")
+    st.warning(f"天氣資料更新中，請稍後重新整理")
 
 st.divider()
 
