@@ -24,21 +24,44 @@ h3 { font-size: 24px !important; }
 st.title("⛰️ 香港行山路線與未來九天天氣助手")
 st.caption("資料來源：Captain VL 隊長郊遊頻道 ｜ 香港天文台官方天氣預報")
 
-# --- 第一部分：香港天文台 9 天天氣預報 ---
-st.subheader("🌤️ 香港天文台未來九天天氣預報")
+# --- 第一部分：香港未來九天天氣預報（高速氣象接口 ＋ 每小時自動更新） ---
+st.subheader("🌤️ 香港未來九天天氣預報")
+
+@st.cache_data(ttl=3600)
+def get_hk_weather():
+    url = "https://open-meteo.com"
+    return requests.get(url, timeout=8).json().get("daily", {})
+
+def code_to_text(c):
+    if c in (0, 1): return "☀️ 天晴乾燥"
+    if c in (2, 3): return "⛅ 多雲有陽光"
+    if c in (45, 48): return "🌫️ 有霧能見度低"
+    if c in (51, 53, 55, 61, 63, 65, 80, 81, 82): return "🌧️ 有雨路滑小心"
+    return "⛈️ 雷暴大雨不宜行山"
+
+weekdays_zh = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
+
 try:
-    w_url = "https://www.weather.gov.hk"
-    w_data = requests.get(w_url, timeout=8).json()
-    forecasts = w_data.get("weatherForecast", [])[:5]
-    cols = st.columns(len(forecasts))
-    for i, day in enumerate(forecasts):
-        with cols[i]:
-            date_str = f"{day['forecastDate'][4:6]}/{day['forecastDate'][6:8]}"
-            st.markdown(f"**{date_str} ({day['week']})**")
-            st.write(f"🌡️ {day['forecastMintemp']['value']}°C - {day['forecastMaxtemp']['value']}°C")
-            st.caption(day['forecastWeather'])
+    om_data = get_hk_weather()
+    dates = om_data.get("time", [])
+    if dates:
+        # 分成兩排顯示（前 5 天一排、後 4 天一排），手機與電腦閱讀字體都寬敞清晰
+        for row_start in (0, 5):
+            row_dates = dates[row_start:row_start + 5]
+            if not row_dates:
+                continue
+            cols = st.columns(5)
+            for idx, d_str in enumerate(row_dates):
+                i = row_start + idx
+                dt = pd.to_datetime(d_str)
+                w_day = weekdays_zh[dt.weekday()]
+                with cols[idx]:
+                    with st.container(border=True):
+                        st.markdown(f"**{d_str[5:].replace('-', '/')} ({w_day})**")
+                        st.write(f"🌡️ {round(om_data['temperature_2m_min'][i])}°C - {round(om_data['temperature_2m_max'][i])}°C")
+                        st.caption(code_to_text(om_data["weathercode"][i]))
 except Exception:
-    st.info("暫時無法連線香港天文台天氣接口，請稍後再試。")
+    st.info("天氣資料更新中，請稍後重新整理。")
 
 st.divider()
 
